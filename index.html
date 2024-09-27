@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entropy Visualization</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            margin-bottom: 20px;
+        }
+        .control-group {
+            margin: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        input {
+            width: 100px;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        #chart {
+            width: 100%;
+            height: 400px;
+        }
+        .line {
+            fill: none;
+            stroke-width: 2px;
+        }
+        .axis {
+            font-size: 12px;
+        }
+        .axis-label {
+            font-size: 14px;
+            fill: #666;
+        }
+        .legend {
+            font-size: 12px;
+        }
+        #recalculateButton {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            font-size: 16px;
+            color: white;
+            background-color: #007AFF;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        #recalculateButton:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Entropy Visualization</h1>
+        <div class="controls">
+            <div class="control-group">
+                <label for="initialEntropy">Initial Entropy (S₀):</label>
+                <input type="number" id="initialEntropy" value="1" min="0" step="0.1">
+            </div>
+            <div class="control-group">
+                <label for="newInstances">New Instances (N):</label>
+                <input type="number" id="newInstances" value="0.5" min="0" step="0.1">
+            </div>
+            <div class="control-group">
+                <label for="introspectionCapacity">Introspection Capacity (K):</label>
+                <input type="number" id="introspectionCapacity" value="1" min="0.1" step="0.1">
+            </div>
+            <div class="control-group">
+                <label for="breakPoint">Break Point Threshold (T):</label>
+                <input type="number" id="breakPoint" value="5" min="0" step="0.1">
+            </div>
+        </div>
+        <button id="recalculateButton">Recalculate</button>
+        <div id="chart"></div>
+    </div>
+
+    <script>
+        const margin = {top: 20, right: 80, bottom: 50, left: 50};
+        const width = 800 - margin.left - margin.right;
+        const height = 400 - margin.top - margin.bottom;
+
+        const svg = d3.select("#chart")
+            .append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+            .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        const x = d3.scaleLinear().range([0, width]);
+        const y = d3.scaleLinear().range([height, 0]);
+
+        const line = d3.line()
+            .x(d => x(d.t))
+            .y(d => y(d.value));
+
+        const xAxis = svg.append("g")
+            .attr("class", "axis")
+            .attr("transform", `translate(0,${height})`);
+
+        const yAxis = svg.append("g")
+            .attr("class", "axis");
+
+        svg.append("text")
+            .attr("class", "axis-label")
+            .attr("text-anchor", "middle")
+            .attr("transform", `translate(${width/2},${height + 40})`)
+            .text("Time");
+
+        svg.append("text")
+            .attr("class", "axis-label")
+            .attr("text-anchor", "middle")
+            .attr("transform", `translate(-35,${height/2})rotate(-90)`)
+            .text("Value");
+
+        const colorScale = d3.scaleOrdinal()
+            .domain(["Entropy", "Introspection", "Break Point"])
+            .range(["#FF6B6B", "#4ECDC4", "#45B7D1"]);
+
+        const legend = svg.append("g")
+            .attr("class", "legend")
+            .attr("transform", `translate(${width - 100}, 20)`);
+
+        ["Entropy", "Introspection", "Break Point"].forEach((item, i) => {
+            const legendRow = legend.append("g")
+                .attr("transform", `translate(0, ${i * 20})`);
+            
+            legendRow.append("rect")
+                .attr("width", 10)
+                .attr("height", 10)
+                .attr("fill", colorScale(item));
+            
+            legendRow.append("text")
+                .attr("x", 20)
+                .attr("y", 10)
+                .text(item);
+        });
+
+        function updateChart() {
+            const S0 = parseFloat(d3.select("#initialEntropy").property("value"));
+            const N = parseFloat(d3.select("#newInstances").property("value"));
+            const K = parseFloat(d3.select("#introspectionCapacity").property("value"));
+            const T = parseFloat(d3.select("#breakPoint").property("value"));
+
+            const data = [];
+            for (let t = 0; t <= 10; t += 0.1) {
+                const I = Math.min(5, t); // Introspection increases with time, but caps at 5
+                const R = I / (I + K);
+                const S = S0 * Math.exp(N * t - R);
+                data.push({t, entropy: S, introspection: R, breakPoint: T});
+            }
+
+            x.domain([0, d3.max(data, d => d.t)]);
+            y.domain([0, d3.max([
+                d3.max(data, d => d.entropy),
+                d3.max(data, d => d.introspection),
+                T
+            ])]);
+
+            xAxis.call(d3.axisBottom(x));
+            yAxis.call(d3.axisLeft(y));
+
+            svg.selectAll(".line").remove();
+
+            svg.append("path")
+                .datum(data)
+                .attr("class", "line")
+                .attr("d", line.y(d => y(d.entropy)))
+                .attr("stroke", colorScale("Entropy"));
+
+            svg.append("path")
+                .datum(data)
+                .attr("class", "line")
+                .attr("d", line.y(d => y(d.introspection)))
+                .attr("stroke", colorScale("Introspection"));
+
+            svg.append("path")
+                .datum(data)
+                .attr("class", "line")
+                .attr("d", line.y(d => y(d.breakPoint)))
+                .attr("stroke", colorScale("Break Point"))
+                .attr("stroke-dasharray", "5,5");
+        }
+
+        d3.select("#recalculateButton").on("click", updateChart);
+        updateChart(); // Initial chart render
+    </script>
+</body>
+</html>
